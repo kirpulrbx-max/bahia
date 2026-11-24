@@ -7,6 +7,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod ai_accounts;
 mod wallpapers;
 
 use std::{env, io, path::PathBuf, process::Command, sync::Mutex, time::Duration};
@@ -195,36 +196,40 @@ async fn open_repository() -> Result<(), String> {
 async fn wallpaper_preview(window: tauri::WebviewWindow) -> Option<String> {
     let hwnd = window.hwnd().ok()?.0 as isize;
     tauri::async_runtime::spawn_blocking(move || {
-        use base64::Engine;
-        let image = bahia_shell::imagery::wallpaper_preview(hwnd)?;
-        let mut rgba = image.bgra;
-        for pixel in rgba.as_chunks_mut::<4>().0 {
-            // Wallpaper decodes are opaque in normal use. Unpremultiply when
-            // a PNG wallpaper does carry alpha, before encoding straight RGBA.
-            let alpha = u32::from(pixel[3]);
-            pixel.swap(0, 2);
-            for value in &mut pixel[..3] {
-                *value = (u32::from(*value) * 255)
-                    .checked_div(alpha)
-                    .unwrap_or(0)
-                    .min(255) as u8;
-            }
-        }
-        let mut bytes = Vec::new();
-        {
-            let mut encoder = png::Encoder::new(&mut bytes, image.width, image.height);
-            encoder.set_color(png::ColorType::Rgba);
-            encoder.set_depth(png::BitDepth::Eight);
-            encoder.write_header().ok()?.write_image_data(&rgba).ok()?;
-        }
-        Some(format!(
-            "data:image/png;base64,{}",
-            base64::engine::general_purpose::STANDARD.encode(bytes)
-        ))
+        png_data_url(bahia_shell::imagery::wallpaper_preview(hwnd)?)
     })
     .await
     .ok()
     .flatten()
+}
+
+/// A premultiplied BGRA image as a PNG data URI.
+pub(crate) fn png_data_url(image: bahia_shell::icons::IconImage) -> Option<String> {
+    use base64::Engine;
+    let mut rgba = image.bgra;
+    for pixel in rgba.as_chunks_mut::<4>().0 {
+        // Wallpaper decodes are opaque in normal use. Unpremultiply when an
+        // image does carry alpha, before encoding straight RGBA.
+        let alpha = u32::from(pixel[3]);
+        pixel.swap(0, 2);
+        for value in &mut pixel[..3] {
+            *value = (u32::from(*value) * 255)
+                .checked_div(alpha)
+                .unwrap_or(0)
+                .min(255) as u8;
+        }
+    }
+    let mut bytes = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut bytes, image.width, image.height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder.write_header().ok()?.write_image_data(&rgba).ok()?;
+    }
+    Some(format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    ))
 }
 
 /// Downloads the signed installer and runs it; the installer stops the dock,
@@ -347,7 +352,9 @@ fn main() {
             open_repository,
             wallpaper_preview,
             wallpapers::wallpaper_selection,
-            wallpapers::apply_wallpaper
+            wallpapers::apply_wallpaper,
+            ai_accounts::ai_accounts,
+            ai_accounts::ai_sign_in
         ])
         .run(tauri::generate_context!());
     if let Err(error) = result {

@@ -36,6 +36,37 @@ pub struct Genie {
     pub slot: Edges,
 }
 
+/// How the window travels to its slot.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Style {
+    /// Through a funnel ([`Genie::frame`]).
+    #[default]
+    Genie,
+    /// The whole window shrinks straight into the slot ([`Genie::scaled`]).
+    Scale,
+}
+
+impl Genie {
+    /// Progress of the scale style at time `t` (0..=1), eased in and out.
+    #[must_use]
+    pub fn scale_progress(t: f32) -> f32 {
+        smoothstep(t)
+    }
+
+    /// The window's rectangle at time `t` in the scale style.
+    #[must_use]
+    pub fn scaled(&self, t: f32) -> Edges {
+        let p = Self::scale_progress(t);
+        let lerp = |from: f32, to: f32| from + (to - from) * p;
+        Edges {
+            left: lerp(self.window.left, self.slot.left),
+            top: lerp(self.window.top, self.slot.top),
+            right: lerp(self.window.right, self.slot.right),
+            bottom: lerp(self.window.bottom, self.slot.bottom),
+        }
+    }
+}
+
 /// The edges finish bending at this fraction of the animation.
 const BEND_END: f32 = 0.5;
 /// The image starts sliding at this fraction.
@@ -122,6 +153,21 @@ mod tests {
             bottom: 1060.0,
         },
     };
+
+    #[test]
+    fn scaled_should_start_at_the_window_and_end_at_the_slot() {
+        assert_eq!(GENIE.scaled(0.0), GENIE.window);
+        assert_eq!(GENIE.scaled(1.0), GENIE.slot);
+    }
+
+    #[test]
+    fn scaled_should_shrink_steadily() {
+        let width = |t: f32| {
+            let edges = GENIE.scaled(t);
+            edges.right - edges.left
+        };
+        assert!((1..=10).all(|i| width(i as f32 / 10.0) <= width((i - 1) as f32 / 10.0)));
+    }
 
     fn frame(t: f32) -> Vec<Strip> {
         let mut strips = vec![

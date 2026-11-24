@@ -238,6 +238,10 @@ const HIDDEN_ICONS_DELAY: Duration = Duration::from_millis(250);
 /// How long the flyout is kept under the arrow while Windows finishes
 /// opening it (it may place it again during its animation).
 const HIDDEN_ICONS_HOLD: Duration = Duration::from_millis(1200);
+/// How long Windows may take to show the flyout after Enter.
+const HIDDEN_ICONS_APPEAR: Duration = Duration::from_secs(3);
+/// The longest the flyout is followed, should it never close.
+const HIDDEN_ICONS_FOLLOW: Duration = Duration::from_secs(600);
 /// Space between the menu bar and the flyout, in physical pixels.
 const HIDDEN_ICONS_GAP: i32 = 6;
 /// The hidden-icons flyout: Windows 11, then Windows 10.
@@ -285,15 +289,43 @@ pub fn toggle_hidden_icons(anchor: (i32, i32)) {
     std::thread::spawn(move || {
         std::thread::sleep(HIDDEN_ICONS_DELAY);
         tap(&[VK_RETURN]);
-        let until = Instant::now() + HIDDEN_ICONS_HOLD;
-        while Instant::now() < until {
-            if let Some(flyout) = open_overflow() {
+        follow_overflow(anchor);
+    });
+}
+
+/// Keeps the hidden-icons flyout under the menu bar for as long as it is open.
+///
+/// Windows sometimes opens it late (a busy shell), and places it again at the
+/// bottom of the screen when its icons change (an app in the background
+/// starting or quitting) or when it is shown a second time. Holding it only
+/// for a moment after opening left it at the bottom in those cases, so it is
+/// followed until it closes.
+fn follow_overflow(anchor: (i32, i32)) {
+    let started = Instant::now();
+    let mut seen_at: Option<Instant> = None;
+    loop {
+        match open_overflow() {
+            Some(flyout) => {
+                seen_at.get_or_insert_with(Instant::now);
                 keep_under(flyout, anchor);
             }
-            std::thread::sleep(Duration::from_millis(10));
+            // Closed after showing: nothing left to follow.
+            None if seen_at.is_some() => break,
+            None if started.elapsed() > HIDDEN_ICONS_APPEAR => break,
+            None => {}
         }
-        OPENING_HIDDEN_ICONS.store(false, Ordering::Relaxed);
-    });
+        // Only the opening needs the hidden taskbar to keep the focus.
+        if seen_at.is_some_and(|at| at.elapsed() > HIDDEN_ICONS_HOLD)
+            || started.elapsed() > HIDDEN_ICONS_APPEAR
+        {
+            OPENING_HIDDEN_ICONS.store(false, Ordering::Relaxed);
+        }
+        if started.elapsed() > HIDDEN_ICONS_FOLLOW {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(15));
+    }
+    OPENING_HIDDEN_ICONS.store(false, Ordering::Relaxed);
 }
 
 /// From Win+B until the hidden-icons flyout has had time to open.

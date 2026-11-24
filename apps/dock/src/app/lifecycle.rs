@@ -202,7 +202,7 @@ pub fn run() -> Result<()> {
         crate::appearance::set(config.appearance);
         let roster = roster_from(&config);
         let auto_hide = config.auto_hide;
-        let slide_omega = config.dock_auto_hide_speed.omega();
+        let slide_omega = config.dock_slide_omega();
         let mut app = App {
             visual,
             input,

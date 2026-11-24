@@ -20,7 +20,7 @@ use windows::Win32::{
     },
 };
 
-use crate::flight::Flight;
+use crate::flight::{Flight, Motion};
 
 use super::{
     App, HIDE_TIMER, LAST_FRONT, Outside, Role, SWITCHER_APPEAR, SWITCHER_ECHO, SWITCHER_POLL_MS,
@@ -47,6 +47,17 @@ pub(super) fn selection_after_closing(index: usize, alive: &[bool]) -> Option<us
 }
 
 impl App {
+    /// Length and style of minimize and restore flights, from Settings.
+    pub(super) fn motion(&self) -> Motion {
+        Motion {
+            seconds: self.config.minimize_seconds(),
+            style: match self.config.minimize_style {
+                bahia_config::MinimizeStyle::Scale => bahia_core::genie::Style::Scale,
+                bahia_config::MinimizeStyle::Genie => bahia_core::genie::Style::Genie,
+            },
+        }
+    }
+
     /// Screen rectangle, at rest and with the window's aspect ratio, where a
     /// minimized window lives in the dock: its app's icon, or its own
     /// thumbnail slot with "show minimized windows". The genie flies into it
@@ -194,7 +205,7 @@ impl App {
                 snapshot,
                 slot,
                 screen,
-                self.config.genie_speed.seconds(),
+                self.motion(),
                 self.position(),
             )
         });
@@ -255,7 +266,7 @@ impl App {
                 from,
                 frame,
                 screen,
-                self.config.genie_speed.seconds(),
+                self.motion(),
                 self.position(),
             ) {
                 self.flights.push(flight);
@@ -537,10 +548,11 @@ impl App {
 
         // The launching app has opened a window, so finish its current bounce.
         let now = Instant::now();
+        let hop = self.hop();
         for (id, bounce) in &mut self.bounces {
             if bounce.until.is_none() && self.roster.is_running(id) {
                 let elapsed = now.duration_since(bounce.start).as_secs_f32();
-                bounce.until = Some(bounce::end_of_hop(elapsed));
+                bounce.until = Some(bounce::end_of_hop_with(elapsed, hop));
             }
         }
 

@@ -1,78 +1,91 @@
 /**
- * Sidebar icons in the style of macOS System Settings: a white glyph on a
- * rounded tile of the section's colour. Static markup, so it lives outside
- * the components that use it.
+ * Sidebar icons in the style of Windows 11 Settings: thin Fluent-style line
+ * glyphs in the text colour, with the accent on the selected section. Static
+ * markup, so it lives outside the components that use it.
  */
 
 import type { ReactNode } from "react";
 
-export type SectionId = "appearance" | "dock" | "windows" | "menubar" | "system";
-
-const TILES: Record<SectionId, [string, string]> = {
-  appearance: ["#5c5c62", "#1c1c1e"],
-  dock: ["#4aa3ff", "#0a6cf0"],
-  windows: ["#b57bff", "#7d3ff0"],
-  menubar: ["#ff9f45", "#f0640a"],
-  system: ["#a1a1a6", "#6e6e73"],
-};
+export type SectionId = "appearance" | "dock" | "windows" | "menubar" | "layout" | "system";
 
 const GLYPHS: Record<SectionId, ReactNode> = {
-  // A circle half light, half dark, as macOS draws Appearance.
+  // A brush over a palette: personalization.
   appearance: (
     <>
-      <circle cx="12" cy="12" r="6.6" fill="none" stroke="#fff" strokeWidth="1.6" />
-      <path d="M12 5.4a6.6 6.6 0 0 1 0 13.2z" fill="#fff" />
+      <path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.8 1.8-1.7 0-1.3-1.2-1.6-1.2-2.8 0-1 .8-1.7 1.8-1.7h2.1a4 4 0 0 0 4-4C20.5 6.6 16.7 3.5 12 3.5Z" />
+      <circle cx="7.8" cy="11" r="1.1" />
+      <circle cx="10.2" cy="7.4" r="1.1" />
+      <circle cx="14.6" cy="7.6" r="1.1" />
     </>
   ),
-  // A dock: three icons on a shelf.
+  // A screen with a row of icons along its bottom.
   dock: (
     <>
-      <rect x="4" y="14.5" width="16" height="5" rx="1.6" fill="#fff" opacity="0.55" />
-      <rect x="6" y="10.5" width="3.4" height="3.4" rx="0.9" fill="#fff" />
-      <rect x="10.3" y="10.5" width="3.4" height="3.4" rx="0.9" fill="#fff" />
-      <rect x="14.6" y="10.5" width="3.4" height="3.4" rx="0.9" fill="#fff" />
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+      <path d="M7.5 16.5h9" />
+      <path d="M8 13.5h1.5M11.25 13.5h1.5M14.5 13.5H16" />
     </>
   ),
-  // Two overlapping windows.
+  // Two stacked windows.
   windows: (
     <>
-      <rect x="4.5" y="5.5" width="11" height="8.5" rx="1.4" fill="#fff" opacity="0.55" />
-      <rect x="8.5" y="9.5" width="11" height="9" rx="1.4" fill="#fff" />
-      <rect x="8.5" y="9.5" width="11" height="2.2" rx="1" fill="#000" opacity="0.18" />
+      <rect x="7.5" y="7.5" width="13" height="11" rx="2" />
+      <path d="M16.5 7.5V6a2 2 0 0 0-2-2h-9a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2" />
+      <path d="M7.5 10.5h13" />
     </>
   ),
-  // A bar across the top of a screen.
+  // A screen with a band across its top.
   menubar: (
     <>
-      <rect x="4" y="5" width="16" height="14" rx="2" fill="#fff" opacity="0.55" />
-      <rect x="4" y="5" width="16" height="3.6" rx="1.6" fill="#fff" />
-      <circle cx="16.8" cy="6.8" r="0.9" fill="#f0640a" />
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+      <path d="M3.5 8.5h17" />
+      <path d="M15.5 6.5h2.5" />
+    </>
+  ),
+  // Three sliders: arranging and tuning.
+  layout: (
+    <>
+      <path d="M4 7h16M4 12h16M4 17h16" />
+      <circle cx="9" cy="7" r="1.9" className="icon-knob" />
+      <circle cx="15" cy="12" r="1.9" className="icon-knob" />
+      <circle cx="11" cy="17" r="1.9" className="icon-knob" />
     </>
   ),
   // A gear.
   system: (
-    <path
-      fill="#fff"
-      fillRule="evenodd"
-      d="M10.6 3.5h2.8l.4 2.1c.5.2 1 .4 1.4.8l2-.8 1.4 2.4-1.6 1.4a6 6 0 0 1 0 1.6l1.6 1.4-1.4 2.4-2-.8c-.4.3-.9.6-1.4.8l-.4 2.1h-2.8l-.4-2.1c-.5-.2-1-.5-1.4-.8l-2 .8-1.4-2.4 1.6-1.4a6 6 0 0 1 0-1.6L5.4 8l1.4-2.4 2 .8c.4-.4.9-.6 1.4-.8zM12 9.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2z"
-      transform="translate(0 0.5)"
-    />
+    <>
+      <circle cx="12" cy="12" r="2.8" />
+      <path d="M10.6 3.8h2.8l.5 2.3 1.6.9 2.2-.8 1.4 2.4-1.8 1.6v1.6l1.8 1.6-1.4 2.4-2.2-.8-1.6.9-.5 2.3h-2.8l-.5-2.3-1.6-.9-2.2.8-1.4-2.4 1.8-1.6v-1.6L5 8.6l1.4-2.4 2.2.8 1.6-.9z" />
+    </>
   ),
 };
 
 export function SectionIcon({ section }: { section: SectionId }) {
-  const [top, bottom] = TILES[section];
-  const gradient = `tile-${section}`;
   return (
-    <svg className="nav-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-      <defs>
-        <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor={top} />
-          <stop offset="1" stopColor={bottom} />
-        </linearGradient>
-      </defs>
-      <rect width="24" height="24" rx="5.5" fill={`url(#${gradient})`} />
+    <svg
+      className="nav-icon"
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       {GLYPHS[section]}
+    </svg>
+  );
+}
+
+/** The window's caption buttons, drawn as Windows 11 draws them. */
+export function CaptionGlyph({ kind }: { kind: "minimize" | "maximize" | "close" }) {
+  return (
+    <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1" aria-hidden="true">
+      {kind === "minimize" ? <path d="M0 5.5h10" /> : null}
+      {kind === "maximize" ? <rect x="0.5" y="0.5" width="9" height="9" rx="1.5" /> : null}
+      {kind === "close" ? <path d="m0.5 0.5 9 9m0-9-9 9" /> : null}
     </svg>
   );
 }

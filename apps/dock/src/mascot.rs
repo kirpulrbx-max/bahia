@@ -1,4 +1,4 @@
-//! The crab: a pixel-art mascot that comes out only for moments worth it
+//! Pulpo, Bahia's octopus: a pixel-art mascot that comes out only for moments worth it
 //! (an AI plan resetting or running out, the charger plugged in or out, energy
 //! saver starting) and plays a short act, then leaves.
 //!
@@ -6,7 +6,7 @@
 //! window, hands the whole choreography to the compositor as keyframe
 //! animations (the body slides smoothly, the legs step at 8 fps, as pixel
 //! art does) and is destroyed when it ends. The dock only checks, every
-//! 50 ms of those few seconds, whether the pointer is on the crab, so it can
+//! 50 ms of those few seconds, whether the pointer is on the octopus, so it can
 //! react.
 
 use std::time::{Duration, Instant};
@@ -40,12 +40,13 @@ use crate::gfx::Gfx;
 /// Sprite cells. `.` is transparent.
 fn color(cell: u8) -> Option<[u8; 3]> {
     Some(match cell {
-        b'k' | b'e' => [43, 20, 18],
-        b'o' => [232, 116, 64],
-        b'h' => [255, 214, 160],
-        b'd' => [204, 84, 44],
-        b'p' => [244, 140, 140],
-        b'm' => [226, 70, 60],
+        b'k' => [16, 52, 74],
+        b'e' => [20, 30, 45],
+        b'o' => [64, 200, 200],
+        b'h' => [190, 245, 240],
+        b'd' => [30, 150, 165],
+        b'p' => [255, 150, 170],
+        b'm' => [226, 70, 90],
         b'b' => [70, 160, 235],
         b'B' => [170, 215, 250],
         b'r' => [236, 72, 72],
@@ -57,33 +58,33 @@ fn color(cell: u8) -> Option<[u8; 3]> {
 
 const WIDTH: usize = 22;
 
-/// The body, 22 cells wide, without a face.
+/// The head, 22 cells wide, without a face: a round turquoise dome.
 const BODY: [&str; 12] = [
-    "....kkkkkkkkkkkkkk....",
+    "......kkkkkkkkkk......",
+    "....kkhhhoooooookk....",
     "...khhooooooooooook...",
-    "...khoooooooooooook...",
-    "...kooooooooooooook...",
-    "...kooooooooooooook...",
-    "kkkkooooooooooooookkkk",
-    "kooooooooooooooooooook",
-    "kooooooooooooooooooook",
-    "kkkkooooooooooooookkkk",
-    "...kooooooooooooook...",
-    "...kooooooooooooook...",
-    "...kddddddddddddddk...",
+    "..khoooooooooooooook..",
+    "..kooooooooooooooook..",
+    ".kooooooooooooooooook.",
+    ".kooooooooooooooooook.",
+    ".kooooooooooooooooook.",
+    ".kooooooooooooooooook.",
+    ".kooooooooooooooooook.",
+    "..kooooooooooooooook..",
+    "..kddddddddddddddddk..",
 ];
 
-/// The legs standing, and mid-step (the first and third lifted).
+/// The tentacles at rest, and mid-wiggle (shifted, tips curled the other way).
 const LEGS: [[&str; 3]; 2] = [
     [
-        "...kddkkddkkddkkddk...",
-        "...kddkkddkkddkkddk...",
-        "...kkkkkkkkkkkkkkkk...",
+        "...kdk.kdk..kdk.kdk...",
+        "...kdk.kdk..kdk.kdk...",
+        "..kk...kk....kk...kk..",
     ],
     [
-        "...kddkkddkkddkkddk...",
-        "...kkkkkddkkkkkkddk...",
-        ".......kkkk....kkkk...",
+        "...kdk.kdk..kdk.kdk...",
+        "....kdk.kdk..kdk.kdk..",
+        ".....kk..kk....kk..kk.",
     ],
 ];
 
@@ -187,8 +188,8 @@ impl Emote {
     }
 }
 
-/// The crab with `face`, legs standing or mid-step, `cell` pixels a cell.
-fn crab_image(face: Face, step: bool, cell: u32) -> IconImage {
+/// The octopus with `face`, tentacles at rest or mid-wiggle, `cell` pixels a cell.
+fn sprite_image(face: Face, step: bool, cell: u32) -> IconImage {
     let mut grid: Vec<Vec<u8>> = BODY
         .iter()
         .chain(LEGS[usize::from(step)].iter())
@@ -811,7 +812,7 @@ fn choreograph(
     hop.Children()?.InsertAtTop(&reaction)?;
     let poses_layer = reaction.Children()?;
     for pose in &poses {
-        let sprite = sprite(gfx, &crab_image(pose.0, pose.1, cell_px))?;
+        let sprite = sprite(gfx, &sprite_image(pose.0, pose.1, cell_px))?;
         poses_layer.InsertAtTop(&sprite)?;
         let shown = c.CreateScalarKeyFrameAnimation()?;
         shown.SetDuration(duration)?;

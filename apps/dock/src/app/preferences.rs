@@ -190,7 +190,7 @@ impl App {
         let workspaces_changed = config.show_other_workspaces != self.config.show_other_workspaces;
         let moved = config.dock_position != self.config.dock_position;
         apply_explorer_pin(&mut self.roster, config.pin_explorer);
-        self.slide.omega = config.dock_auto_hide_speed.omega();
+        self.slide.omega = config.dock_slide_omega();
         self.config = config;
         if moved {
             // A hidden dock comes out of its new edge on every display.
@@ -311,6 +311,8 @@ impl App {
     pub(super) fn apply_menu_bar_setting(&mut self) {
         let widgets = MenuBarWidgets {
             island_style: self.config.menu_bar_island_style,
+            order: self.config.menu_bar_order.clone(),
+            hidden: self.config.menu_bar_hidden.clone(),
         };
         if !self.config.menu_bar {
             self.menubar = None;
@@ -320,7 +322,7 @@ impl App {
                 self.config.ai_usage,
                 self.config.menu_bar_music,
                 self.config.menu_bar_auto_hide,
-                widgets,
+                widgets.clone(),
             )
             .inspect_err(|error| eprintln!("bahia: barra superior: {error:#}"))
             .ok();

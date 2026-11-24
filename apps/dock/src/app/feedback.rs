@@ -3,7 +3,7 @@
 use std::{sync::atomic::Ordering, thread, time::Instant};
 
 use anyhow::Result;
-use bahia_core::{attention::Attention, bounce};
+use bahia_core::attention::Attention;
 use bahia_shell::{
     power, recycle_bin, status,
     system::animations_enabled,
@@ -277,6 +277,11 @@ impl App {
 
     /// `until: None` is the bounce of an app being opened, which the user can
     /// turn off; a request for attention always bounces.
+    /// Length of one bounce, from Settings.
+    pub(super) fn hop(&self) -> f32 {
+        self.config.bounce_ms as f32 / 1000.0
+    }
+
     pub(super) fn start_bounce(&mut self, id: String, until: Option<f32>) {
         if until.is_none() && !self.config.bounce_on_open {
             return;
@@ -313,8 +318,11 @@ impl App {
             .map(|window| window.app_id.clone());
         if let Some(app_id) = app_id {
             let changed = self.attention_enabled && self.attention.request(hwnd, foreground);
-            if (changed || !self.attention_enabled) && animations_enabled() {
-                self.start_bounce(app_id.clone(), Some(ATTENTION_HOPS * bounce::HOP_SECONDS));
+            if (changed || !self.attention_enabled)
+                && animations_enabled()
+                && self.config.bounce_on_attention
+            {
+                self.start_bounce(app_id.clone(), Some(ATTENTION_HOPS * self.hop()));
             }
             if changed {
                 self.sync_badge_visuals()?;

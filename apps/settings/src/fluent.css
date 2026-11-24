@@ -1,0 +1,343 @@
+/*
+ * Bahia's own look for Settings, after Windows 11 (Fluent): a title bar with
+ * caption buttons, a left navigation with an accent pill, setting cards with
+ * hairline strokes, and Fluent toggles, sliders and buttons. Loaded after
+ * styles.css, whose layout it keeps.
+ */
+
+:root {
+  --accent: #0067c0;
+  --accent-hover: #1975c5;
+  --on-accent: #ffffff;
+  --text: rgba(0, 0, 0, 0.9);
+  --text-dim: rgba(0, 0, 0, 0.6);
+  --window: rgba(243, 243, 243, 0.94);
+  --sidebar: transparent;
+  --content: transparent;
+  --card: rgba(255, 255, 255, 0.72);
+  --card-hover: rgba(249, 249, 249, 0.6);
+  --stroke: rgba(0, 0, 0, 0.0578);
+  --stroke-strong: rgba(0, 0, 0, 0.1622);
+  --line: rgba(0, 0, 0, 0.0803);
+  --track: rgba(0, 0, 0, 0.4458);
+  --hover: rgba(0, 0, 0, 0.0373);
+  --pressed: rgba(0, 0, 0, 0.0241);
+  --control: rgba(255, 255, 255, 0.7);
+  --control-hover: rgba(249, 249, 249, 0.5);
+  --segment: #ffffff;
+  --thumb: #ffffff;
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #4cc2ff;
+    --accent-hover: #47b1e8;
+    --on-accent: #000000;
+    --text: #ffffff;
+    --text-dim: rgba(255, 255, 255, 0.786);
+    --window: rgba(32, 32, 32, 0.94);
+    --card: rgba(255, 255, 255, 0.0512);
+    --card-hover: rgba(255, 255, 255, 0.0837);
+    --stroke: rgba(0, 0, 0, 0.1);
+    --stroke-strong: rgba(255, 255, 255, 0.0698);
+    --line: rgba(255, 255, 255, 0.0837);
+    --track: rgba(255, 255, 255, 0.5442);
+    --hover: rgba(255, 255, 255, 0.0605);
+    --pressed: rgba(255, 255, 255, 0.0419);
+    --control: rgba(255, 255, 255, 0.0605);
+    --control-hover: rgba(255, 255, 255, 0.0837);
+    --segment: rgba(255, 255, 255, 0.0837);
+    --thumb: #454545;
+  }
+}
+
+/* --------------------------------------------------------------- Window */
+
+.window {
+  grid-template-columns: 236px minmax(0, 1fr);
+  grid-template-rows: 44px minmax(0, 1fr);
+  background: var(--window);
+}
+
+.titlebar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  height: 44px;
+  padding-inline-start: 16px;
+}
+
+.titlebar-app {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.titlebar-icon { display: block; border-radius: 3px; }
+
+.captions { display: flex; align-items: flex-start; direction: ltr; }
+
+.caption {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 32px;
+  color: var(--text);
+  transition: background 0.08s linear;
+}
+
+.caption:hover { background: var(--hover); }
+.caption:active { background: var(--pressed); color: var(--text-dim); }
+.caption-close:hover { background: #c42b1c; color: #fff; }
+.caption-close:active { background: #c83c31; color: rgba(255, 255, 255, 0.7); }
+.caption:focus-visible { outline: 2px solid var(--text); outline-offset: -2px; }
+
+/* ----------------------------------------------------------- Navigation */
+
+.sidebar {
+  border: 0;
+  padding: 4px 8px 12px 8px;
+}
+
+.nav-item {
+  position: relative;
+  gap: 14px;
+  height: 36px;
+  margin-bottom: 3px;
+  padding: 0 12px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.nav-item:hover { background: var(--hover); }
+.nav-item:active { background: var(--pressed); }
+
+.nav-item[aria-current="page"] {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* The accent pill Windows 11 puts beside the selected page. */
+.nav-item[aria-current="page"]::before {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 50%;
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--accent);
+  content: "";
+  transform: translateY(-50%);
+}
+
+.nav-icon { filter: none; color: var(--text); }
+.nav-item[aria-current="page"] .nav-icon { color: var(--accent); }
+.nav-icon .icon-knob { fill: var(--window); }
+.nav-badge { background: #c42b1c; border-radius: 4px; }
+
+.project-link {
+  border: 1px solid var(--stroke);
+  border-radius: 6px;
+  background: var(--card);
+}
+.project-link > svg:first-child { color: var(--accent); }
+
+/* -------------------------------------------------------------- Content */
+
+.content {
+  margin: 0 0 0 0;
+  border-start-start-radius: 8px;
+  border-top: 1px solid var(--stroke);
+  border-inline-start: 1px solid var(--stroke);
+  background: color-mix(in srgb, var(--window) 60%, transparent);
+}
+
+.content-title {
+  padding: 26px 36px 18px;
+  font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 36px;
+}
+
+.content-body { padding: 0 36px 36px; }
+
+.card-group { margin-bottom: 24px; }
+
+.card-title {
+  margin: 0 0 8px 2px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.card {
+  border: 1px solid var(--stroke);
+  border-radius: 6px;
+  background: var(--card);
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.row {
+  min-height: 64px;
+  padding: 12px 16px;
+}
+
+.row:hover { background: var(--card-hover); }
+.row-label { font-size: 14px; }
+.row-hint { font-size: 12px; color: var(--text-dim); }
+.row + .row, .visual-setting + .row, .row-sub + .row { border-top-color: var(--line); }
+.row-sub .row { padding-inline-start: 52px; }
+.row-sub .row::before { inset-inline-start: 0; background: var(--line); }
+.card-note { padding: 0 16px 16px; font-size: 12px; }
+.card > .card-note:first-child { padding-top: 14px; }
+
+.update {
+  border-radius: 6px;
+  margin: 0 36px 18px;
+}
+
+/* ------------------------------------------------------------- Controls */
+
+/* Toggle switch: outlined while off, filled with the accent while on. */
+.toggle {
+  width: 40px;
+  height: 20px;
+  padding: 0 3px;
+  border-radius: 10px;
+  border: 1px solid var(--track);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.toggle:hover { background: var(--hover); }
+
+.toggle-knob {
+  width: 12px;
+  height: 12px;
+  background: var(--text-dim);
+  box-shadow: none;
+  transition: transform 0.16s cubic-bezier(0.55, 0.55, 0, 1), width 0.1s ease, height 0.1s ease;
+}
+
+.toggle:hover .toggle-knob { width: 14px; height: 14px; }
+
+.toggle[aria-checked="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle[aria-checked="true"]:hover { background: var(--accent-hover); }
+
+.toggle[aria-checked="true"] .toggle-knob {
+  background: var(--on-accent);
+  transform: translateX(20px);
+}
+
+.toggle[aria-checked="true"]:hover .toggle-knob { transform: translateX(18px); }
+
+/* Slider: a thin track, the filled part in the accent, a ringed thumb. */
+.slider input {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--accent) var(--filled), var(--track) var(--filled));
+}
+
+.slider input::-webkit-slider-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--stroke-strong);
+  background: radial-gradient(circle, var(--accent) 0 5px, var(--thumb) 5.5px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  transition: background 0.1s ease;
+}
+
+.slider input:hover::-webkit-slider-thumb {
+  background: radial-gradient(circle, var(--accent) 0 6.5px, var(--thumb) 7px);
+}
+
+.slider-value { font-size: 12px; min-width: 52px; }
+
+/* Buttons and selects: Fluent's standard control. */
+.push,
+.select-control {
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid var(--stroke);
+  border-bottom-color: var(--stroke-strong);
+  border-radius: 4px;
+  background: var(--control);
+  box-shadow: none;
+}
+
+.push:hover, .select-control:hover { background: var(--control-hover); border-color: var(--stroke); }
+.push:active { background: var(--pressed); color: var(--text-dim); }
+.push-primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.push-primary:hover { background: var(--accent-hover); }
+.push-danger { background: #c42b1c; color: #fff; border-color: transparent; }
+.select-control { padding-inline-end: 32px; }
+
+/* Segmented choice: a row of Fluent toggle buttons. */
+.segmented {
+  gap: 4px;
+  padding: 0;
+  background: transparent;
+}
+
+.segment {
+  padding: 5px 12px;
+  border: 1px solid var(--stroke);
+  border-bottom-color: var(--stroke-strong);
+  border-radius: 4px;
+  background: var(--control);
+}
+
+.segment:hover { background: var(--control-hover); }
+
+.segment:has(input:checked) {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: none;
+}
+
+/* Picture choices (themes, dock position). */
+.visual-setting { padding: 16px; }
+.visual-legend { font-size: 14px; }
+.visual-choice-body { border-radius: 6px; border-color: var(--stroke); background: var(--control); }
+.visual-choice input:checked + .visual-choice-body {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  background: var(--control);
+}
+.visual-check { color: var(--on-accent); }
+
+.wallpaper-image { border-radius: 6px; }
+
+/* Lists arranged in Layout and animations. */
+.order-row { border-top-color: var(--line); padding: 6px 16px; min-height: 48px; }
+.order-row:hover { background: var(--card-hover); }
+.order-move { border-radius: 4px; }
+
+button:focus-visible,
+input:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+
+@media (max-width: 740px) {
+  .window { grid-template-columns: 200px minmax(0, 1fr); }
+  .content-title { padding-left: 24px; padding-right: 24px; }
+  .content-body { padding-left: 24px; padding-right: 24px; }
+}
+
+/* AI accounts: a status dot beside each sign-in button. */
+.account-control { display: flex; align-items: center; gap: 12px; }
+.account-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--track); }
+.account-dot[data-state="on"] { background: #0f7b0f; box-shadow: 0 0 0 3px rgba(15, 123, 15, 0.18); }
+.account-dot[data-state="missing"] { background: transparent; border: 1px solid var(--track); }
+@media (prefers-color-scheme: dark) { .account-dot[data-state="on"] { background: #6ccb5f; } }
