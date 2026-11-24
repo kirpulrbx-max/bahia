@@ -196,8 +196,9 @@ fn known_locations(tool: &str) -> Vec<PathBuf> {
             if let Some(home) = &home {
                 places.push(home.join(".claude/local/claude.cmd"));
                 places.push(home.join(".claude/local/claude.exe"));
-                // The Claude desktop app keeps its own Claude Code here: the
-                // newest version wins.
+                // The Claude desktop app runs its own Claude Code from its
+                // data folder; its updater also leaves copies here.
+                places.extend(desktop_app_claude());
                 places.extend(newest_download(&home.join(".claude/downloads")));
             }
         }
@@ -211,7 +212,35 @@ fn known_locations(tool: &str) -> Vec<PathBuf> {
     places
 }
 
-/// The most recently written `claude-*.exe` in `folder`.
+/// The Claude Code the Claude desktop app runs:
+/// `%LOCALAPPDATA%\Claude-Data\<profile>\claude-code\<version>\<build>\claude.exe`,
+/// the most recently written complete one.
+fn desktop_app_claude() -> Option<PathBuf> {
+    let data = PathBuf::from(env::var_os("LOCALAPPDATA")?).join("Claude-Data");
+    let children = |folder: &Path| -> Vec<PathBuf> {
+        std::fs::read_dir(folder)
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .map(|entry| entry.path())
+                    .filter(|path| path.is_dir())
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    children(&data)
+        .iter()
+        .flat_map(|profile| children(&profile.join("claude-code")))
+        .flat_map(|version| children(&version))
+        .map(|build| build.join("claude.exe"))
+        .filter(|exe| exe.is_file() && complete_executable(exe))
+        .filter_map(|exe| Some((exe.metadata().ok()?.modified().ok()?, exe)))
+        .max_by_key(|(modified, _)| *modified)
+        .map(|(_, exe)| exe)
+}
+
+/// The most recently written complete `claude-*.exe` in `folder`. A download
+/// cut short keeps its name but not its body, and Windows refuses to run it.
 fn newest_download(folder: &Path) -> Option<PathBuf> {
     std::fs::read_dir(folder)
         .ok()?
@@ -220,9 +249,48 @@ fn newest_download(folder: &Path) -> Option<PathBuf> {
             let name = entry.file_name().to_string_lossy().to_lowercase();
             name.starts_with("claude-") && name.ends_with(".exe")
         })
+        .filter(|entry| complete_executable(&entry.path()))
         .filter_map(|entry| Some((entry.metadata().ok()?.modified().ok()?, entry.path())))
         .max_by_key(|(modified, _)| *modified)
         .map(|(_, path)| path)
+}
+
+/// Whether `path` is a whole Windows program: its headers are there and
+/// every section they list ends inside the file.
+fn complete_executable(path: &Path) -> bool {
+    use std::io::Read;
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return false;
+    };
+    let Ok(length) = file.metadata().map(|metadata| metadata.len()) else {
+        return false;
+    };
+    let mut head = vec![0u8; 4096];
+    let Ok(read) = file.read(&mut head) else {
+        return false;
+    };
+    pe_sections_end(&head[..read]).is_some_and(|end| end > 0 && end <= length)
+}
+
+/// Where the last section of a PE image ends, from its first bytes.
+fn pe_sections_end(head: &[u8]) -> Option<u64> {
+    let u16_at = |at: usize| Some(u16::from_le_bytes(head.get(at..at + 2)?.try_into().ok()?));
+    let u32_at = |at: usize| Some(u32::from_le_bytes(head.get(at..at + 4)?.try_into().ok()?));
+    if head.get(..2)? != b"MZ" {
+        return None;
+    }
+    let pe = u32_at(0x3C)? as usize;
+    if head.get(pe..pe + 4)? != b"PE\0\0" {
+        return None;
+    }
+    let sections = usize::from(u16_at(pe + 6)?);
+    let table = pe + 24 + usize::from(u16_at(pe + 20)?);
+    (0..sections)
+        .map(|index| {
+            let entry = table + index * 40;
+            Some(u64::from(u32_at(entry + 20)?) + u64::from(u32_at(entry + 16)?))
+        })
+        .try_fold(0u64, |end, section| Some(end.max(section?)))
 }
 
 mod registry {
@@ -389,14 +457,66 @@ mod tests {
         }
     }
 
+    /// A minimal PE image whose one section ends at `section_end`, padded to `length`.
+    fn fake_exe(section_end: u32, length: usize) -> Vec<u8> {
+        let mut bytes = vec![0u8; length.max(512)];
+        bytes[..2].copy_from_slice(b"MZ");
+        bytes[0x3C..0x40].copy_from_slice(&0x80u32.to_le_bytes());
+        bytes[0x80..0x84].copy_from_slice(b"PE\0\0");
+        bytes[0x86..0x88].copy_from_slice(&1u16.to_le_bytes()); // one section
+        bytes[0x94..0x96].copy_from_slice(&0u16.to_le_bytes()); // no optional header
+        let entry = 0x80 + 24;
+        bytes[entry + 16..entry + 20].copy_from_slice(&(section_end - 0x200).to_le_bytes());
+        bytes[entry + 20..entry + 24].copy_from_slice(&0x200u32.to_le_bytes());
+        bytes.truncate(length.max(0x100));
+        bytes
+    }
+
+    #[test]
+    fn pe_sections_end_should_read_the_last_section() {
+        assert_eq!(pe_sections_end(&fake_exe(0x1000, 0x1000)), Some(0x1000));
+        assert_eq!(pe_sections_end(b"not a program"), None);
+    }
+
+    #[test]
+    fn newest_download_should_skip_a_download_cut_short() -> std::io::Result<()> {
+        let folder = env::temp_dir().join(format!("bahia-ai-cut-{}", std::process::id()));
+        std::fs::create_dir_all(&folder)?;
+        std::fs::write(
+            folder.join("claude-1.0.0-win32-x64.exe"),
+            fake_exe(0x1000, 0x1000),
+        )?;
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        // Newer, but its section runs past the end of the file.
+        std::fs::write(
+            folder.join("claude-2.0.0-win32-x64.exe"),
+            fake_exe(0x4000, 0x1000),
+        )?;
+        let found = newest_download(&folder);
+        std::fs::remove_dir_all(&folder)?;
+        assert_eq!(
+            found.and_then(|path| path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())),
+            Some("claude-1.0.0-win32-x64.exe".to_owned())
+        );
+        Ok(())
+    }
+
     #[test]
     fn newest_download_should_pick_the_latest_claude_exe() -> std::io::Result<()> {
         let folder = env::temp_dir().join(format!("bahia-ai-test-{}", std::process::id()));
         std::fs::create_dir_all(&folder)?;
-        std::fs::write(folder.join("claude-1.0.0-win32-x64.exe"), b"old")?;
+        std::fs::write(
+            folder.join("claude-1.0.0-win32-x64.exe"),
+            fake_exe(0x1000, 0x1000),
+        )?;
         std::thread::sleep(std::time::Duration::from_millis(20));
-        std::fs::write(folder.join("claude-2.0.0-win32-x64.exe"), b"new")?;
-        std::fs::write(folder.join("other.exe"), b"no")?;
+        std::fs::write(
+            folder.join("claude-2.0.0-win32-x64.exe"),
+            fake_exe(0x1000, 0x1000),
+        )?;
+        std::fs::write(folder.join("other.exe"), fake_exe(0x1000, 0x1000))?;
         let found = newest_download(&folder);
         std::fs::remove_dir_all(&folder)?;
         assert_eq!(
