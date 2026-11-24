@@ -14,8 +14,8 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use chrono::{DateTime, Local, Utc};
 use bahia_shell::icons::IconImage;
+use chrono::{DateTime, Local, Utc};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

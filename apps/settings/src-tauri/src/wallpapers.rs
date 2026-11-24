@@ -237,8 +237,7 @@ mod tests {
 
     #[test]
     fn arbitrary_ids_are_rejected_before_writes_or_system_changes() {
-        let root =
-            env::temp_dir().join(format!("bahia-wallpaper-rejected-{}", std::process::id()));
+        let root = env::temp_dir().join(format!("bahia-wallpaper-rejected-{}", std::process::id()));
         for id in [0, 13, 255] {
             let result = apply_at(id, &root, |_| panic!("invalid ID must never reach Windows"));
             assert!(result.is_err());

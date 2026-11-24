@@ -184,8 +184,7 @@ fn open_release_notes(url: String) -> Result<(), String> {
 #[tauri::command]
 async fn open_repository() -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(|| {
-        launcher::open("https://github.com/kirpulrbx-max/bahia")
-            .map_err(|error| error.to_string())
+        launcher::open("https://github.com/kirpulrbx-max/bahia").map_err(|error| error.to_string())
     })
     .await
     .map_err(|error| error.to_string())?

@@ -186,11 +186,7 @@ fn hit_test(hwnd: HWND, origin: POINT) {
         let verdict = if ours == expect_ours { "OK" } else { "FALLO" };
         println!(
             "[{verdict}] {name}: el clic llega a {}",
-            if ours {
-                "Bahia"
-            } else {
-                "la ventana de abajo"
-            }
+            if ours { "Bahia" } else { "la ventana de abajo" }
         );
     }
 }

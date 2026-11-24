@@ -42,8 +42,7 @@ pub(super) fn load_config() -> Config {
                 taskbar_pins: Some(pins),
                 ..Config::default()
             };
-            match bahia_config::update(&path, |saved| Ok(saved.unwrap_or_else(|| config.clone())))
-            {
+            match bahia_config::update(&path, |saved| Ok(saved.unwrap_or_else(|| config.clone()))) {
                 Ok(saved) => saved,
                 Err(error) => {
                     eprintln!("bahia: {error}");
@@ -484,10 +483,9 @@ mod dock_preferences_tests {
                 let _ = std::fs::remove_file(self.0.with_extension("json.lock"));
             }
         }
-        let file = Fixture(env::temp_dir().join(format!(
-            "bahia-fixed-shortcuts-{}.json",
-            std::process::id()
-        )));
+        let file = Fixture(
+            env::temp_dir().join(format!("bahia-fixed-shortcuts-{}.json", std::process::id())),
+        );
         let initial = Config {
             pinned: vec!["editor".into()],
             shortcuts_folder: Some("C:\\Projects".into()),
