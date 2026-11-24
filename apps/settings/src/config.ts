@@ -50,7 +50,45 @@ export interface Config {
   appearance: Appearance;
   /** The folder shown at the right of the dock, whose contents open as a menu. */
   shortcutsFolder: string | null;
+  // Layout and animations.
+  /** Right-side menu bar items, left to right. */
+  menuBarOrder: MenuBarItem[];
+  menuBarHidden: MenuBarItem[];
+  /** Dock sections from its start. */
+  dockOrder: DockSection[];
+  /** null follows dockDensity. */
+  dockGap: number | null;
+  dockPadding: number | null;
+  minimizeStyle: MinimizeStyle;
+  /** null follows genieSpeed. */
+  genieMs: number | null;
+  /** Tenths of an icon on each side. */
+  magnifyRange: number;
+  /** Percentage of the icon. */
+  bounceHeight: number;
+  bounceMs: number;
+  bounceOnAttention: boolean;
+  /** null follows dockAutoHideSpeed. */
+  dockSlideMs: number | null;
 }
+
+export type MenuBarItem =
+  | "widgets" | "taskView" | "hiddenIcons" | "inputLanguage" | "accessories" | "battery"
+  | "volume" | "network" | "bluetooth" | "search" | "privacy" | "controlCenter" | "clock";
+export type DockSection =
+  | "start" | "apps" | "recents" | "minimized" | "shortcuts" | "downloads" | "trash";
+export type MinimizeStyle = "genie" | "scale";
+
+/** Mirrors the ranges in `bahia_config`. */
+export const LAYOUT_RANGES = {
+  dockGap: { min: 0, max: 40 },
+  dockPadding: { min: 0, max: 30 },
+  genieMs: { min: 100, max: 1500 },
+  magnifyRange: { min: 10, max: 60 },
+  bounceHeight: { min: 10, max: 120 },
+  bounceMs: { min: 250, max: 1500 },
+  dockSlideMs: { min: 60, max: 1200 },
+} as const;
 
 export const ICON_SIZE = { min: 32, max: 96 } as const;
 export const MAX_MAGNIFIED_SIZE = 160;

@@ -92,7 +92,7 @@ function fixture(section = "menubar", config = {}, save = async () => {}, galler
   function load(filename) {
     if (modules.has(filename)) return modules.get(filename).exports;
     if (filename.endsWith(".json")) return JSON.parse(readFileSync(filename, "utf8"));
-    if (filename.endsWith(".jpg")) return `file:///${filename.replaceAll("\\", "/")}`;
+    if (/\.(jpg|png)$/.test(filename)) return `file:///${filename.replaceAll("\\", "/")}`;
     const module = { exports: {} };
     modules.set(filename, module);
     compiled.get(filename)((id) => {

@@ -3,6 +3,7 @@
 use std::time::Instant;
 
 use anyhow::{Context, Result};
+use bahia_config::DockSection;
 use bahia_core::{
     bounce,
     frame::{DockEdge, Frame as DockFrame},
@@ -19,10 +20,9 @@ use windows::Win32::{Foundation::RECT, UI::WindowsAndMessaging::SetTimer};
 use crate::scene::{Drag, Frame, Scene, SceneInput, SlotContent, Theme};
 
 use super::{
-    App, BADGE_CORNER, BOUNCE_HEIGHT, ENTER_HALO, Entry, FLOAT_MARGIN, LABEL_ROOM, LEAVE_HALO,
-    RANGE_IN_ICONS, REORDER_DURATION, REVEAL_STRIP, ReorderMotion, Role, SHADOW_ROOM,
-    SIDE_LABEL_MAX, START_ID, Stage, StageKey, TRIM_DELAY_MS, TRIM_TIMER, place, window_id,
-    window_of,
+    App, BADGE_CORNER, ENTER_HALO, Entry, FLOAT_MARGIN, LABEL_ROOM, LEAVE_HALO, REORDER_DURATION,
+    REVEAL_STRIP, ReorderMotion, Role, SHADOW_ROOM, SIDE_LABEL_MAX, START_ID, Stage, StageKey,
+    TRIM_DELAY_MS, TRIM_TIMER, place, window_id, window_of,
 };
 
 impl App {
@@ -44,50 +44,65 @@ impl App {
             members: Vec::new(),
         };
 
-        let mut entries: Vec<Entry> = self
-            .roster
-            .apps()
-            .iter()
-            .map(|app| match self.roster.group(&app.id) {
-                Some(group) => Entry {
-                    members: group.apps.clone(),
-                    ..icon(&app.id, Role::Group, app.running)
-                },
-                None => icon(&app.id, Role::App, app.running),
-            })
-            .collect();
-        if self.config.show_start {
-            entries.insert(0, icon(START_ID, Role::Start, false));
-        }
-        if self.config.show_recents && !self.roster.recent().is_empty() {
-            entries.push(separator());
-            entries.extend(
-                self.roster
+        // Sections in the user's order (Settings → Layout); a divider goes
+        // wherever one kind of section (apps, recents, folders) meets another.
+        let mut entries: Vec<Entry> = Vec::new();
+        let mut last_kind: Option<u8> = None;
+        for section in &self.config.dock_order {
+            let items: Vec<Entry> = match section {
+                DockSection::Start if self.config.show_start => {
+                    vec![icon(START_ID, Role::Start, false)]
+                }
+                DockSection::Apps => self
+                    .roster
+                    .apps()
+                    .iter()
+                    .map(|app| match self.roster.group(&app.id) {
+                        Some(group) => Entry {
+                            members: group.apps.clone(),
+                            ..icon(&app.id, Role::Group, app.running)
+                        },
+                        None => icon(&app.id, Role::App, app.running),
+                    })
+                    .collect(),
+                DockSection::Recents if self.config.show_recents => self
+                    .roster
                     .recent()
                     .iter()
-                    .map(|id| icon(id, Role::App, false)),
-            );
-        }
-        entries.push(separator());
-        // Unless "show minimized windows" is on, minimized windows hide in
-        // their app's icon instead of getting a thumbnail here.
-        if self.config.show_minimized {
-            entries.extend(
-                self.minimized
+                    .map(|id| icon(id, Role::App, false))
+                    .collect(),
+                // Unless "show minimized windows" is on, minimized windows
+                // hide in their app's icon instead of getting a thumbnail here.
+                DockSection::Minimized if self.config.show_minimized => self
+                    .minimized
                     .iter()
-                    .map(|&hwnd| icon(&window_id(hwnd), Role::Window, false)),
-            );
-        }
-        if let Some(folder) = &self.config.shortcuts_folder {
-            entries.push(icon(folder, Role::Shortcuts, false));
-        }
-        if self.config.show_downloads
-            && let Some(downloads) = &self.downloads
-        {
-            entries.push(icon(downloads, Role::Folder, false));
-        }
-        if self.config.show_trash {
-            entries.push(icon(recycle_bin::PARSING_NAME, Role::Trash, false));
+                    .map(|&hwnd| icon(&window_id(hwnd), Role::Window, false))
+                    .collect(),
+                DockSection::Shortcuts => self
+                    .config
+                    .shortcuts_folder
+                    .iter()
+                    .map(|folder| icon(folder, Role::Shortcuts, false))
+                    .collect(),
+                DockSection::Downloads if self.config.show_downloads => self
+                    .downloads
+                    .iter()
+                    .map(|downloads| icon(downloads, Role::Folder, false))
+                    .collect(),
+                DockSection::Trash if self.config.show_trash => {
+                    vec![icon(recycle_bin::PARSING_NAME, Role::Trash, false)]
+                }
+                _ => Vec::new(),
+            };
+            if items.is_empty() {
+                continue;
+            }
+            let kind = section.kind();
+            if last_kind.is_some_and(|last| last != kind) {
+                entries.push(separator());
+            }
+            last_kind = Some(kind);
+            entries.extend(items);
         }
         // Hiding fixed items can leave a section empty. Never leave loose dividers.
         let mut previous_separator = true;
@@ -130,7 +145,8 @@ impl App {
             auto_hide: self.config.auto_hide,
             smart_hide: self.config.smart_hide,
             icon_size: self.config.icon_size,
-            density: self.config.dock_density,
+            spacing: self.config.dock_spacing(),
+            magnify_range: self.config.magnify_range_icons(),
             max_scale: self.config.max_scale(),
             indicators: self.config.show_indicators,
             entries: self.current_entries(),
@@ -151,7 +167,7 @@ impl App {
 
         let scale = monitor.scale;
         let max_scale = key.max_scale;
-        let (gap, padding) = key.density.spacing();
+        let (gap, padding) = key.spacing;
         let mut metrics = Metrics {
             icon: key.icon_size as f32,
             gap,
@@ -179,7 +195,7 @@ impl App {
         // It scales with the icons, so one ratio fits both exactly.
         let spread = if edge.is_vertical() {
             Magnifier {
-                range: RANGE_IN_ICONS * (metrics.icon + metrics.gap),
+                range: key.magnify_range * (metrics.icon + metrics.gap),
                 max_scale,
             }
             .max_growth()
@@ -204,7 +220,7 @@ impl App {
         );
 
         let magnifier = Magnifier {
-            range: RANGE_IN_ICONS * (metrics.icon + metrics.gap),
+            range: key.magnify_range * (metrics.icon + metrics.gap),
             max_scale,
         };
 
@@ -478,6 +494,8 @@ impl App {
     }
 
     pub(super) fn render(&mut self) -> Result<()> {
+        let hop = self.hop();
+        let bounce_height = self.config.bounce_height as f32 / 100.0;
         let Some(stage) = &mut self.stage else {
             return Ok(());
         };
@@ -507,7 +525,7 @@ impl App {
         let lift_of = |id: &str| {
             self.bounces.get(id).map_or(0.0, |bounce| {
                 let elapsed = now.duration_since(bounce.start).as_secs_f32();
-                bounce::lift(elapsed, stage.icon * BOUNCE_HEIGHT)
+                bounce::lift_with(elapsed, stage.icon * bounce_height, hop)
             })
         };
         // A group bounces for any of its apps (opening, asking for attention).

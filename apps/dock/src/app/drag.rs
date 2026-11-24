@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use anyhow::Result;
-use bahia_core::{bounce, layout::Rect, magnify::magnify};
+use bahia_core::{layout::Rect, magnify::magnify};
 use bahia_shell::{
     files, pins,
     tracker::{self, normalize_id},
@@ -372,7 +372,7 @@ impl App {
             if windows.is_empty() {
                 return Ok(None);
             }
-            self.start_bounce(id.clone(), Some(bounce::HOP_SECONDS));
+            self.start_bounce(id.clone(), Some(self.hop()));
             return Ok(self.activating(windows));
         }
         let Some(entry) = self.hovered.and_then(|index| self.entries.get(index)) else {
@@ -380,7 +380,7 @@ impl App {
         };
         match entry.role {
             Role::Group => {
-                self.start_bounce(id.clone(), Some(bounce::HOP_SECONDS));
+                self.start_bounce(id.clone(), Some(self.hop()));
                 self.spring_opened_group = true;
                 self.open_group_view(&id)?;
                 Ok(None)
@@ -389,7 +389,7 @@ impl App {
                 let Some(hwnd) = window_of(&id) else {
                     return Ok(None);
                 };
-                self.start_bounce(id.clone(), Some(bounce::HOP_SECONDS));
+                self.start_bounce(id.clone(), Some(self.hop()));
                 Ok(self.activating(vec![hwnd]))
             }
             Role::App => {
@@ -411,7 +411,7 @@ impl App {
                 } else {
                     windows
                 };
-                self.start_bounce(id.clone(), Some(bounce::HOP_SECONDS));
+                self.start_bounce(id.clone(), Some(self.hop()));
                 Ok(self.activating(target_windows))
             }
             _ => Ok(None),

@@ -6,14 +6,27 @@ pub const HOP_SECONDS: f32 = 0.7;
 /// `height` is the maximum bounce height.
 #[must_use]
 pub fn lift(elapsed: f32, height: f32) -> f32 {
-    height * (PI * elapsed / HOP_SECONDS).sin().abs()
+    lift_with(elapsed, height, HOP_SECONDS)
+}
+
+/// [`lift`] for hops lasting `hop` seconds.
+#[must_use]
+pub fn lift_with(elapsed: f32, height: f32, hop: f32) -> f32 {
+    height * (PI * elapsed / hop.max(f32::EPSILON)).sin().abs()
 }
 
 /// End time of the current bounce, allowing it to stop without cutting off
 /// the icon mid-air.
 #[must_use]
 pub fn end_of_hop(elapsed: f32) -> f32 {
-    (elapsed / HOP_SECONDS).ceil().max(1.0) * HOP_SECONDS
+    end_of_hop_with(elapsed, HOP_SECONDS)
+}
+
+/// [`end_of_hop`] for hops lasting `hop` seconds.
+#[must_use]
+pub fn end_of_hop_with(elapsed: f32, hop: f32) -> f32 {
+    let hop = hop.max(f32::EPSILON);
+    (elapsed / hop).ceil().max(1.0) * hop
 }
 
 #[cfg(test)]
@@ -43,6 +56,12 @@ mod tests {
     #[test]
     fn end_of_hop_should_round_up_to_the_next_landing() {
         assert!((end_of_hop(0.9) - 2.0 * HOP_SECONDS).abs() < 1e-6);
+    }
+
+    #[test]
+    fn lift_with_should_follow_its_own_hop_length() {
+        assert!((lift_with(0.25, 20.0, 0.5) - 20.0).abs() < 1e-3);
+        assert!((end_of_hop_with(0.6, 0.5) - 1.0).abs() < 1e-6);
     }
 
     #[test]

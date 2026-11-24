@@ -64,7 +64,7 @@ use std::{
 use anyhow::Result;
 use bahia_core::{
     frame::DockEdge,
-    genie::{Edges, Genie},
+    genie::{Edges, Genie, Style},
 };
 use bahia_shell::{icons::IconImage, screen, tracker};
 use windows::{
@@ -297,12 +297,21 @@ enum Phase {
     Settling { until: Instant },
 }
 
+/// How a flight moves: its length and its style.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Motion {
+    pub seconds: f32,
+    pub style: Style,
+}
+
 pub struct Flight {
     /// The window being minimized or restored.
     pub hwnd: isize,
     created_at: Instant,
     /// How long the flight lasts (Settings → Genie speed).
     seconds: f32,
+    /// Genie or scale (Settings → Layout and animations).
+    style: Style,
     foreground: isize,
     overlay: HWND,
     /// The window under the overlay that holds a minimize's stand-in.
@@ -492,10 +501,14 @@ fn cut(
 fn bind(
     gfx: &Gfx,
     genie: &Genie,
+    style: Style,
     pieces: &[Piece],
     image: (f32, f32),
     reverse: bool,
 ) -> Result<CompositionPropertySet> {
+    if style == Style::Scale {
+        return bind_scale(gfx, genie, pieces, image, reverse);
+    }
     let compositor = &gfx.compositor;
     let (window, slot) = (genie.window, genie.slot);
     let travel = (slot.bottom - window.top).max(0.0);
@@ -546,11 +559,64 @@ fn bind(
     Ok(drive)
 }
 
+/// The scale style: every strip is its share of one rectangle that moves and
+/// shrinks from the window to the slot ([`Genie::scaled`]). One shared value,
+/// `p` (0 = window, 1 = slot), drives them all.
+fn bind_scale(
+    gfx: &Gfx,
+    genie: &Genie,
+    pieces: &[Piece],
+    image: (f32, f32),
+    reverse: bool,
+) -> Result<CompositionPropertySet> {
+    let compositor = &gfx.compositor;
+    let (window, slot) = (genie.window, genie.slot);
+    let height = (window.bottom - window.top).max(1.0);
+    let drive = compositor.CreatePropertySet()?;
+    drive.InsertScalar(h!("p"), if reverse { 1.0 } else { 0.0 })?;
+    // The rectangle's height at `p`, as a share of the window's.
+    let ratio = format!(
+        "(1 + ({shrink:.5}) * d.p)",
+        shrink = (slot.bottom - slot.top) / height - 1.0
+    );
+    let offset = format!(
+        "Vector3(({left:.3}) + ({dl:.3}) * d.p, ({top:.3}) + ({dt:.3}) * d.p + (y0 - ({top:.3})) * {ratio}, 0)",
+        left = window.left,
+        dl = slot.left - window.left,
+        top = window.top,
+        dt = slot.top - window.top,
+    );
+    let scale = format!(
+        "Vector3((({width:.3}) + ({dw:.3}) * d.p) / {source:.3}, (y1 - y0) * {ratio} / rows, 1)",
+        width = window.right - window.left,
+        dw = (slot.right - slot.left) - (window.right - window.left),
+        source = image.0,
+    );
+    let offset = compositor.CreateExpressionAnimationWithExpression(&HSTRING::from(offset))?;
+    let scale = compositor.CreateExpressionAnimationWithExpression(&HSTRING::from(scale))?;
+    offset.SetReferenceParameter(h!("d"), &drive)?;
+    scale.SetReferenceParameter(h!("d"), &drive)?;
+    let stretch = height / image.1;
+    for piece in pieces {
+        let y0 = window.top + piece.top * stretch;
+        let y1 = y0 + piece.rows * stretch;
+        offset.SetScalarParameter(h!("y0"), y0)?;
+        scale.SetScalarParameter(h!("y0"), y0)?;
+        scale.SetScalarParameter(h!("y1"), y1)?;
+        scale.SetScalarParameter(h!("rows"), piece.rows)?;
+        piece.visual.StartAnimation(h!("Offset"), &offset)?;
+        piece.visual.StartAnimation(h!("Scale"), &scale)?;
+    }
+    Ok(drive)
+}
+
 /// Starts the flight bound by [`bind`]: the compositor animates `bend` and
-/// `shift` for `seconds` at the display's refresh rate.
+/// `shift` (or `p`, for the scale style) for `seconds` at the display's
+/// refresh rate.
 fn launch(
     gfx: &Gfx,
     genie: &Genie,
+    style: Style,
     drive: &CompositionPropertySet,
     reverse: bool,
     seconds: f32,
@@ -576,8 +642,13 @@ fn launch(
         drive.StartAnimation(name, &animation)?;
         Ok(())
     };
-    animate(h!("bend"), Genie::bend, 1.0)?;
-    animate(h!("shift"), Genie::slide, travel)?;
+    match style {
+        Style::Scale => animate(h!("p"), Genie::scale_progress, 1.0)?,
+        Style::Genie => {
+            animate(h!("bend"), Genie::bend, 1.0)?;
+            animate(h!("shift"), Genie::slide, travel)?;
+        }
+    }
     Ok(())
 }
 
@@ -615,7 +686,7 @@ impl Flight {
         from: RECT,
         frame: RECT,
         screen: RECT,
-        seconds: f32,
+        motion: Motion,
         edge: DockEdge,
     ) -> Option<Self> {
         let turn = Turn::new(edge, screen);
@@ -714,7 +785,8 @@ impl Flight {
         Some(Self {
             hwnd,
             created_at: Instant::now(),
-            seconds,
+            seconds: motion.seconds,
+            style: motion.style,
             foreground: tracker::foreground_window(),
             overlay,
             stand: Some(stand),
@@ -750,7 +822,7 @@ impl Flight {
         snapshot: &Snapshot,
         slot: RECT,
         screen: RECT,
-        seconds: f32,
+        motion: Motion,
         edge: DockEdge,
     ) -> Option<Self> {
         // A copy turned for another edge (the dock moved meanwhile) would
@@ -772,8 +844,10 @@ impl Flight {
             .apply(&root)
             .and_then(|()| clip_at_slot(gfx, &root, &genie, turn))
             .and_then(|()| cut(gfx, &root, image, height))
-            .and_then(|pieces| bind(gfx, &genie, &pieces, size, true))
-            .and_then(|drive| launch(gfx, &genie, &drive, true, seconds).map(|()| drive));
+            .and_then(|pieces| bind(gfx, &genie, motion.style, &pieces, size, true))
+            .and_then(|drive| {
+                launch(gfx, &genie, motion.style, &drive, true, motion.seconds).map(|()| drive)
+            });
         let Ok(drive) = drive else {
             // SAFETY: Our own window, destroyed once.
             unsafe {
@@ -784,7 +858,8 @@ impl Flight {
         let flight = Self {
             hwnd,
             created_at: Instant::now(),
-            seconds,
+            seconds: motion.seconds,
+            style: motion.style,
             foreground: tracker::foreground_window(),
             overlay,
             stand: None,
@@ -965,8 +1040,8 @@ impl Flight {
         let window = self.source;
         let pieces = cut(gfx, &self.root, &image, image.height)?;
         let size = (image.width as f32, image.height as f32);
-        let drive = bind(gfx, &self.genie, &pieces, size, false)?;
-        launch(gfx, &self.genie, &drive, false, self.seconds)?;
+        let drive = bind(gfx, &self.genie, self.style, &pieces, size, false)?;
+        launch(gfx, &self.genie, self.style, &drive, false, self.seconds)?;
         self.captured = Some((restore, window));
         Ok(drive)
     }
@@ -1193,7 +1268,10 @@ mod native_tests {
             from,
             from,
             screen,
-            0.5,
+            Motion {
+                seconds: 0.5,
+                style: Style::Genie,
+            },
             DockEdge::Bottom,
         )
         .ok_or_else(|| anyhow::anyhow!("could not create the native animation"))?;

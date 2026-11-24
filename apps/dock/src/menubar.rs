@@ -17,7 +17,7 @@
 //! and volume changes arrive through separate notifications; nothing polls.
 
 use anyhow::Result;
-use bahia_config::{IslandStyle, Language};
+use bahia_config::{IslandStyle, Language, MenuBarItem};
 use bahia_shell::{
     accessories::{Kind as AccessoryKind, Snapshot as AccessorySnapshot},
     appbar::{AppBar, Edge},
@@ -179,15 +179,21 @@ enum Action {
     Bluetooth,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MenuBarWidgets {
     pub island_style: IslandStyle,
+    /// Right-side items, left to right (Settings → Layout).
+    pub order: Vec<MenuBarItem>,
+    /// Items the user hid.
+    pub hidden: Vec<MenuBarItem>,
 }
 
 impl Default for MenuBarWidgets {
     fn default() -> Self {
         Self {
             island_style: IslandStyle::Notch,
+            order: MenuBarItem::DEFAULT_ORDER.to_vec(),
+            hidden: Vec::new(),
         }
     }
 }
@@ -1926,7 +1932,7 @@ impl MenuBar {
             input: system::input_language(),
             battery: system::battery(),
             status: self.status,
-            widgets: self.widgets,
+            widgets: self.widgets.clone(),
             usage: self
                 .usage
                 .as_ref()
@@ -2099,99 +2105,181 @@ impl MenuBar {
         let mut right = width - px(SIDE_MARGIN);
         let status = look.status;
         let symbol = |layers: &[(char, f32)]| gfx.glyph_brush(layers, scale, ink);
-        let mut items: Vec<(LabelBrush, Action)> = vec![
-            (
-                gfx.text_brush(&look.clock, scale, false, ink)?,
-                Action::Notifications,
-            ),
-            (gfx.control_center_brush(scale, ink)?, Action::QuickSettings),
-        ];
+        // Each item's pieces, from its right end inward: an icon, its action
+        // and, for readings, the label drawn to its right. Placed below in
+        // the user's order (Settings → Layout), skipping what they hid.
+        type Piece = (LabelBrush, Action, Option<LabelBrush>);
+        let shows = |item: MenuBarItem| !look.widgets.hidden.contains(&item);
+        let mut pieces_of: Vec<(MenuBarItem, Vec<Piece>)> = Vec::new();
+        let mut add = |item: MenuBarItem, pieces: Vec<Piece>| {
+            if !pieces.is_empty() {
+                pieces_of.push((item, pieces));
+            }
+        };
+        if shows(MenuBarItem::Clock) {
+            add(
+                MenuBarItem::Clock,
+                vec![(
+                    gfx.text_brush(&look.clock, scale, false, ink)?,
+                    Action::Notifications,
+                    None,
+                )],
+            );
+        }
+        if shows(MenuBarItem::ControlCenter) {
+            add(
+                MenuBarItem::ControlCenter,
+                vec![(
+                    gfx.control_center_brush(scale, ink)?,
+                    Action::QuickSettings,
+                    None,
+                )],
+            );
+        }
         // Privacy indicators, as the Windows tray shows them: something is
         // using the microphone or camera right now.
-        let privacy = status.privacy;
-        for (on, glyph, action) in [
-            (privacy.microphone, glyph::MICROPHONE, Action::Microphone),
-            (privacy.camera, glyph::CAMERA, Action::Camera),
-        ] {
-            if on {
-                items.push((symbol(&[(glyph, 1.0)])?, action));
+        if shows(MenuBarItem::Privacy) {
+            let privacy = status.privacy;
+            let mut pieces = Vec::new();
+            for (on, glyph, action) in [
+                (privacy.microphone, glyph::MICROPHONE, Action::Microphone),
+                (privacy.camera, glyph::CAMERA, Action::Camera),
+            ] {
+                if on {
+                    pieces.push((symbol(&[(glyph, 1.0)])?, action, None));
+                }
             }
+            add(MenuBarItem::Privacy, pieces);
         }
-        if status.buttons.search {
-            items.push((symbol(&[(glyph::SEARCH, 1.0)])?, Action::Search));
+        if status.buttons.search && shows(MenuBarItem::Search) {
+            add(
+                MenuBarItem::Search,
+                vec![(symbol(&[(glyph::SEARCH, 1.0)])?, Action::Search, None)],
+            );
         }
-        if status.bluetooth_on {
-            items.push((symbol(&[(glyph::BLUETOOTH, 1.0)])?, Action::Bluetooth));
+        if status.bluetooth_on && shows(MenuBarItem::Bluetooth) {
+            add(
+                MenuBarItem::Bluetooth,
+                vec![(symbol(&[(glyph::BLUETOOTH, 1.0)])?, Action::Bluetooth, None)],
+            );
         }
-        match status.network {
-            Network::Wifi { bars, has_internet } => {
-                items.push((
-                    gfx.wifi_brush(bars, has_internet, scale, ink)?,
-                    Action::QuickSettings,
-                ));
-            }
-            Network::Ethernet => {
-                items.push((symbol(&[(glyph::ETHERNET, 1.0)])?, Action::QuickSettings));
-            }
-            Network::Offline => {
-                items.push((symbol(&[(glyph::OFFLINE, 1.0)])?, Action::QuickSettings));
-            }
+        if shows(MenuBarItem::Network) {
+            let icon = match status.network {
+                Network::Wifi { bars, has_internet } => {
+                    gfx.wifi_brush(bars, has_internet, scale, ink)?
+                }
+                Network::Ethernet => symbol(&[(glyph::ETHERNET, 1.0)])?,
+                Network::Offline => symbol(&[(glyph::OFFLINE, 1.0)])?,
+            };
+            add(
+                MenuBarItem::Network,
+                vec![(icon, Action::QuickSettings, None)],
+            );
         }
-        if let Some(volume) = status.volume {
+        if let Some(volume) = status.volume
+            && shows(MenuBarItem::Volume)
+        {
             let speaker = if volume.muted {
                 glyph::MUTE
             } else {
                 glyph::VOLUME[usize::from(volume.level.min(3))]
             };
-            items.push((symbol(&[(speaker, 1.0)])?, Action::Sound));
+            add(
+                MenuBarItem::Volume,
+                vec![(symbol(&[(speaker, 1.0)])?, Action::Sound, None)],
+            );
         }
-        let mut battery_label = None;
-        if let Some(battery) = look.battery {
-            if status.battery_percentage {
-                battery_label = Some((
-                    items.len(),
-                    gfx.text_brush(&format!("{}%", battery.percent), scale, false, ink)?,
+        if let Some(battery) = look.battery
+            && shows(MenuBarItem::Battery)
+        {
+            let label = if status.battery_percentage {
+                Some(gfx.text_brush(&format!("{}%", battery.percent), scale, false, ink)?)
+            } else {
+                None
+            };
+            add(
+                MenuBarItem::Battery,
+                vec![(
+                    gfx.battery_brush(
+                        battery.percent,
+                        battery.charging,
+                        battery.saver,
+                        scale,
+                        ink,
+                    )?,
+                    Action::QuickSettings,
+                    label,
+                )],
+            );
+        }
+        if shows(MenuBarItem::Accessories) {
+            let mut pieces = Vec::new();
+            for device in look.accessories.into_iter().flatten().rev() {
+                let value = device
+                    .percent
+                    .map_or_else(|| "—".to_owned(), |percent| format!("{percent}%"));
+                let icon = match device.kind {
+                    AccessoryKind::Mouse => glyph::MOUSE,
+                    AccessoryKind::Headset => glyph::HEADSET,
+                };
+                pieces.push((
+                    symbol(&[(icon, 1.0)])?,
+                    Action::AccessoryIndicator,
+                    Some(gfx.text_brush(&value, scale, false, ink)?),
                 ));
             }
-            items.push((
-                gfx.battery_brush(battery.percent, battery.charging, battery.saver, scale, ink)?,
-                Action::QuickSettings,
-            ));
+            add(MenuBarItem::Accessories, pieces);
         }
-        let mut accessory_labels = Vec::new();
-        for device in look.accessories.into_iter().flatten().rev() {
-            let value = device
-                .percent
-                .map_or_else(|| "—".to_owned(), |percent| format!("{percent}%"));
-            accessory_labels.push((items.len(), gfx.text_brush(&value, scale, false, ink)?));
-            let icon = match device.kind {
-                AccessoryKind::Mouse => glyph::MOUSE,
-                AccessoryKind::Headset => glyph::HEADSET,
-            };
-            items.push((symbol(&[(icon, 1.0)])?, Action::AccessoryIndicator));
-        }
-        if let Some(language) = &look.input {
-            items.push((
-                gfx.text_brush(language, scale, false, ink)?,
-                Action::InputLanguage,
-            ));
+        if let Some(language) = &look.input
+            && shows(MenuBarItem::InputLanguage)
+        {
+            add(
+                MenuBarItem::InputLanguage,
+                vec![(
+                    gfx.text_brush(language, scale, false, ink)?,
+                    Action::InputLanguage,
+                    None,
+                )],
+            );
         }
         // The notification area (antivirus, OneDrive, apps in the background)
         // lives only in the hidden taskbar; this arrow opens its flyout.
-        items.push((symbol(&[(glyph::HIDDEN_ICONS, 1.0)])?, Action::HiddenIcons));
-        if status.buttons.task_view {
-            items.push((symbol(&[(glyph::TASK_VIEW, 1.0)])?, Action::TaskView));
+        if shows(MenuBarItem::HiddenIcons) {
+            add(
+                MenuBarItem::HiddenIcons,
+                vec![(
+                    symbol(&[(glyph::HIDDEN_ICONS, 1.0)])?,
+                    Action::HiddenIcons,
+                    None,
+                )],
+            );
         }
-        if status.buttons.widgets {
-            items.push((symbol(&[(glyph::WIDGETS, 1.0)])?, Action::Widgets));
+        if status.buttons.task_view && shows(MenuBarItem::TaskView) {
+            add(
+                MenuBarItem::TaskView,
+                vec![(symbol(&[(glyph::TASK_VIEW, 1.0)])?, Action::TaskView, None)],
+            );
         }
-        for (index, (item, action)) in items.iter().enumerate() {
+        if status.buttons.widgets && shows(MenuBarItem::Widgets) {
+            add(
+                MenuBarItem::Widgets,
+                vec![(symbol(&[(glyph::WIDGETS, 1.0)])?, Action::Widgets, None)],
+            );
+        }
+        // Placed from the right edge inward: the order's last item first.
+        let order = bahia_config::complete_order(&look.widgets.order, &MenuBarItem::DEFAULT_ORDER);
+        let items: Vec<Piece> = order
+            .iter()
+            .rev()
+            .filter_map(|item| {
+                let at = pieces_of.iter().position(|(placed, _)| placed == item)?;
+                Some(pieces_of.swap_remove(at).1)
+            })
+            .flatten()
+            .collect();
+        for (item, action, label) in &items {
             let zone_right = right;
-            if let Some((_, label)) = battery_label
-                .iter()
-                .chain(accessory_labels.iter())
-                .find(|(item_index, _)| *item_index == index)
-            {
+            if let Some(label) = label {
                 right -= label.width;
                 place(&layers, label, right)?;
                 right -= px(6.0);

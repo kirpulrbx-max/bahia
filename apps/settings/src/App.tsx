@@ -32,9 +32,12 @@ import {
 } from "./config";
 import { Card, Row, Segmented, Select, Slider, SubRow, Toggle, VisualChoices } from "./controls";
 import { DockDensityPreview, DockPreview, IslandPreview, SettingIcon, SpeedPreview, ThemePreview } from "./visuals";
-import { type SectionId, SectionIcon } from "./icons";
+import { type SectionId, CaptionGlyph, SectionIcon } from "./icons";
+import appIcon from "./assets/bahia-64.png";
 import { UpdateBanner } from "./UpdateBanner";
 import { WallpaperGallery } from "./WallpaperGallery";
+import { LayoutSection } from "./LayoutSection";
+import { AiAccountsCard } from "./ExtraCards";
 import { type Texts, LANGUAGE_OPTIONS, resolveLanguage, textsFor } from "./i18n";
 
 type UpdateState =
@@ -268,52 +271,26 @@ export function App() {
 
   return (
     <div className="window" lang={language} dir={language === "ar" ? "rtl" : "ltr"}>
-      <aside className="sidebar" data-tauri-drag-region>
-        <div className="traffic">
-          <button
-            type="button"
-            className="light light-close"
-            aria-label={t.close}
-            onClick={() => appWindow.close()}
-          >
-            <svg viewBox="0 0 12 12" className="light-icon" aria-hidden="true">
-              <path
-                d="M 3.5 3.5 L 8.5 8.5 M 8.5 3.5 L 3.5 8.5"
-                stroke="#4c0002"
-                strokeWidth="1.2"
-                strokeLinecap="round"
-              />
-            </svg>
+      {/* A Windows 11 title bar: the app's name on the left, the caption
+          buttons on the right, the rest of it drags the window. */}
+      <header className="titlebar" data-tauri-drag-region>
+        <span className="titlebar-app" data-tauri-drag-region>
+          <img className="titlebar-icon" src={appIcon} alt="" width="16" height="16" />
+          <span data-tauri-drag-region>Bahia</span>
+        </span>
+        <span className="captions">
+          <button type="button" className="caption" aria-label={t.minimize} onClick={() => appWindow.minimize()}>
+            <CaptionGlyph kind="minimize" />
           </button>
-          <button
-            type="button"
-            className="light light-minimize"
-            aria-label={t.minimize}
-            onClick={() => appWindow.minimize()}
-          >
-            <svg viewBox="0 0 12 12" className="light-icon" aria-hidden="true">
-              <path
-                d="M 2.5 6 L 9.5 6"
-                stroke="#995700"
-                strokeWidth="1.3"
-                strokeLinecap="round"
-              />
-            </svg>
+          <button type="button" className="caption" aria-label={t.zoom} onClick={() => appWindow.toggleMaximize()}>
+            <CaptionGlyph kind="maximize" />
           </button>
-          <button
-            type="button"
-            className="light light-zoom"
-            aria-label={t.zoom}
-            onClick={() => appWindow.toggleMaximize()}
-          >
-            <svg viewBox="0 0 12 12" className="light-icon" aria-hidden="true">
-              <path
-                d="M 9.5 2.5 L 9.5 6.5 L 5.5 2.5 Z M 2.5 9.5 L 2.5 5.5 L 6.5 9.5 Z"
-                fill="#006500"
-              />
-            </svg>
+          <button type="button" className="caption caption-close" aria-label={t.close} onClick={() => appWindow.close()}>
+            <CaptionGlyph kind="close" />
           </button>
-        </div>
+        </span>
+      </header>
+      <aside className="sidebar">
         <nav>
           {SECTIONS.map((id) => (
             <NavItem
@@ -339,7 +316,7 @@ export function App() {
       </aside>
 
       <main className="content">
-        <header className="content-title" data-tauri-drag-region>
+        <header className="content-title">
           {sectionTitle(t, section)}
         </header>
         {showBanner && waiting ? (
@@ -562,6 +539,8 @@ export function App() {
                 </Row>
               </Card>
             </>
+          ) : section === "layout" ? (
+            <LayoutSection config={config} t={t} update={update} animationsOff={!animations} />
           ) : section === "menubar" ? (
             <>
               <Card>
@@ -617,6 +596,7 @@ export function App() {
                   />
                 </SubRow>
               </Card>
+              <AiAccountsCard t={t} />
             </>
           ) : (
             <>
@@ -711,7 +691,7 @@ function updateHint(t: Texts, state: UpdateState, version: string): string {
   }
 }
 
-const SECTIONS: readonly SectionId[] = ["appearance", "dock", "windows", "menubar", "system"];
+const SECTIONS: readonly SectionId[] = ["appearance", "dock", "windows", "menubar", "layout", "system"];
 
 const THEMES: readonly Appearance[] = ["auto", "light", "dark", "frosted", "clear", "aurora"];
 
@@ -746,6 +726,8 @@ function sectionTitle(t: Texts, section: SectionId): string {
       return t.windows;
     case "menubar":
       return t.menuBar;
+    case "layout":
+      return t.layout;
     case "system":
       return t.system;
   }

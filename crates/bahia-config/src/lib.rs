@@ -105,7 +105,7 @@ pub struct Config {
     pub show_recents: bool,
     /// Icons bounce while the app they open is starting.
     pub bounce_on_open: bool,
-    /// The crab comes out for moments worth it (an AI plan resetting or
+    /// The octopus comes out for moments worth it (an AI plan resetting or
     /// running out, the charger, energy saver).
     pub mascot: bool,
     /// Settings asks GitHub Releases for a newer version when it opens. The
@@ -126,6 +126,147 @@ pub struct Config {
     /// always bounces too, and window previews always have a close button:
     /// those two switches were retired, and their saved values are ignored.
     pub notification_badges: bool,
+
+    // Layout (Settings → Layout and animations).
+    /// The menu bar's right-side items, left to right as they show. Items a
+    /// version adds and this list lacks go where the default order has them.
+    pub menu_bar_order: Vec<MenuBarItem>,
+    /// Menu bar items the user hid.
+    pub menu_bar_hidden: Vec<MenuBarItem>,
+    /// The dock's sections, from its start (left, or top on a side).
+    pub dock_order: Vec<DockSection>,
+    /// Space between icons, in logical pixels. `None` follows `dock_density`.
+    pub dock_gap: Option<u32>,
+    /// Space between the icons and the dock's edge. `None` follows `dock_density`.
+    pub dock_padding: Option<u32>,
+
+    // Animations.
+    /// How a window goes into the dock when minimized.
+    pub minimize_style: MinimizeStyle,
+    /// Length of the minimize animation in milliseconds. `None` follows `genie_speed`.
+    pub genie_ms: Option<u32>,
+    /// How far magnification reaches, in tenths of an icon on each side.
+    pub magnify_range: u32,
+    /// Height of a bounce, as a percentage of the icon.
+    pub bounce_height: u32,
+    /// Length of one bounce, in milliseconds.
+    pub bounce_ms: u32,
+    /// Icons bounce when their app asks for attention.
+    pub bounce_on_attention: bool,
+    /// How long the dock takes to slide in or out, in milliseconds. `None`
+    /// follows `dock_auto_hide_speed`.
+    pub dock_slide_ms: Option<u32>,
+}
+
+/// The menu bar's right-side items.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MenuBarItem {
+    Widgets,
+    TaskView,
+    HiddenIcons,
+    InputLanguage,
+    Accessories,
+    Battery,
+    Volume,
+    Network,
+    Bluetooth,
+    Search,
+    Privacy,
+    ControlCenter,
+    Clock,
+}
+
+impl MenuBarItem {
+    /// Left to right, as the menu bar always showed them.
+    pub const DEFAULT_ORDER: [Self; 13] = [
+        Self::Widgets,
+        Self::TaskView,
+        Self::HiddenIcons,
+        Self::InputLanguage,
+        Self::Accessories,
+        Self::Battery,
+        Self::Volume,
+        Self::Network,
+        Self::Bluetooth,
+        Self::Search,
+        Self::Privacy,
+        Self::ControlCenter,
+        Self::Clock,
+    ];
+}
+
+/// The dock's sections. Dividers go between the apps, the recent apps and the
+/// folders, wherever the user puts them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DockSection {
+    Start,
+    Apps,
+    Recents,
+    Minimized,
+    Shortcuts,
+    Downloads,
+    Trash,
+}
+
+impl DockSection {
+    pub const DEFAULT_ORDER: [Self; 7] = [
+        Self::Start,
+        Self::Apps,
+        Self::Recents,
+        Self::Minimized,
+        Self::Shortcuts,
+        Self::Downloads,
+        Self::Trash,
+    ];
+
+    /// Sections of one kind share a run between dividers.
+    #[must_use]
+    pub const fn kind(self) -> u8 {
+        match self {
+            Self::Start | Self::Apps => 0,
+            Self::Recents => 1,
+            Self::Minimized | Self::Shortcuts | Self::Downloads | Self::Trash => 2,
+        }
+    }
+}
+
+/// Completes a saved order: drops repeats and adds what it lacks (an item a
+/// newer version added) where `default` has it.
+#[must_use]
+pub fn complete_order<T: Copy + PartialEq>(saved: &[T], default: &[T]) -> Vec<T> {
+    let mut order: Vec<T> = Vec::with_capacity(default.len());
+    for item in saved {
+        if default.contains(item) && !order.contains(item) {
+            order.push(*item);
+        }
+    }
+    for (index, item) in default.iter().enumerate() {
+        if order.contains(item) {
+            continue;
+        }
+        // After the nearest item that comes before it by default.
+        let at = default[..index]
+            .iter()
+            .rev()
+            .find_map(|before| order.iter().position(|placed| placed == before))
+            .map_or(0, |position| position + 1);
+        order.insert(at, *item);
+    }
+    order
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MinimizeStyle {
+    /// The window shrinks straight into its slot.
+    Scale,
+    /// Sucked into the slot through a funnel, as on macOS. Also what an
+    /// unknown value from a newer version reads as.
+    #[default]
+    #[serde(other)]
+    Genie,
 }
 
 /// Pinned apps the user gathered in one dock icon by dropping one on
@@ -273,6 +414,13 @@ pub enum Appearance {
 
 pub const ICON_SIZE_RANGE: (u32, u32) = (32, 96);
 pub const MAX_MAGNIFIED_SIZE: u32 = 160;
+pub const DOCK_GAP_MAX: u32 = 40;
+pub const DOCK_PADDING_MAX: u32 = 30;
+pub const GENIE_MS: (u32, u32) = (100, 1500);
+pub const MAGNIFY_RANGE: (u32, u32) = (10, 60);
+pub const BOUNCE_HEIGHT: (u32, u32) = (10, 120);
+pub const BOUNCE_MS: (u32, u32) = (250, 1500);
+pub const DOCK_SLIDE_MS: (u32, u32) = (60, 1200);
 
 impl Config {
     /// Either policy needs a reveal strip and leaves maximized windows the full work area.
@@ -291,7 +439,58 @@ impl Config {
             .shortcuts_folder
             .map(|folder| folder.trim().to_owned())
             .filter(|folder| !folder.is_empty());
+        self.menu_bar_order = complete_order(&self.menu_bar_order, &MenuBarItem::DEFAULT_ORDER);
+        self.dock_order = complete_order(&self.dock_order, &DockSection::DEFAULT_ORDER);
+        self.dock_gap = self.dock_gap.map(|gap| gap.min(DOCK_GAP_MAX));
+        self.dock_padding = self
+            .dock_padding
+            .map(|padding| padding.min(DOCK_PADDING_MAX));
+        self.genie_ms = self.genie_ms.map(|ms| ms.clamp(GENIE_MS.0, GENIE_MS.1));
+        self.magnify_range = self.magnify_range.clamp(MAGNIFY_RANGE.0, MAGNIFY_RANGE.1);
+        self.bounce_height = self.bounce_height.clamp(BOUNCE_HEIGHT.0, BOUNCE_HEIGHT.1);
+        self.bounce_ms = self.bounce_ms.clamp(BOUNCE_MS.0, BOUNCE_MS.1);
+        self.dock_slide_ms = self
+            .dock_slide_ms
+            .map(|ms| ms.clamp(DOCK_SLIDE_MS.0, DOCK_SLIDE_MS.1));
         self
+    }
+
+    /// Space between icons and inner padding, in logical pixels.
+    #[must_use]
+    pub fn dock_spacing(&self) -> (f32, f32) {
+        let (gap, padding) = self.dock_density.spacing();
+        (
+            self.dock_gap.map_or(gap, |gap| gap as f32),
+            self.dock_padding.map_or(padding, |padding| padding as f32),
+        )
+    }
+
+    /// How long minimizing or restoring a window takes.
+    #[must_use]
+    pub fn minimize_seconds(&self) -> f32 {
+        self.genie_ms
+            .map_or_else(|| self.genie_speed.seconds(), |ms| ms as f32 / 1000.0)
+    }
+
+    /// Frequency of the dock's slide spring; it settles in about `6 / omega` seconds.
+    #[must_use]
+    pub fn dock_slide_omega(&self) -> f32 {
+        self.dock_slide_ms.map_or_else(
+            || self.dock_auto_hide_speed.omega(),
+            |ms| 6000.0 / ms.max(1) as f32,
+        )
+    }
+
+    /// Magnification reach on each side, in icons.
+    #[must_use]
+    pub fn magnify_range_icons(&self) -> f32 {
+        self.magnify_range as f32 / 10.0
+    }
+
+    /// Whether `item` shows in the menu bar.
+    #[must_use]
+    pub fn menu_bar_shows(&self, item: MenuBarItem) -> bool {
+        !self.menu_bar_hidden.contains(&item)
     }
 
     /// Scale of the icon under the cursor (1.0 = no magnification).
@@ -346,6 +545,18 @@ impl Default for Config {
             appearance: Appearance::Auto,
             shortcuts_folder: None,
             notification_badges: true,
+            menu_bar_order: MenuBarItem::DEFAULT_ORDER.to_vec(),
+            menu_bar_hidden: Vec::new(),
+            dock_order: DockSection::DEFAULT_ORDER.to_vec(),
+            dock_gap: None,
+            dock_padding: None,
+            minimize_style: MinimizeStyle::Genie,
+            genie_ms: None,
+            magnify_range: 30,
+            bounce_height: 50,
+            bounce_ms: 700,
+            bounce_on_attention: true,
+            dock_slide_ms: None,
         }
     }
 }
@@ -479,6 +690,48 @@ fn write_config(path: &Path, config: &Config) -> Result<(), ConfigError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn complete_order_should_keep_the_saved_order() {
+        let saved = [DockSection::Trash, DockSection::Apps, DockSection::Start];
+        let order = complete_order(&saved, &DockSection::DEFAULT_ORDER);
+        assert_eq!(&order[..2], &[DockSection::Trash, DockSection::Apps]);
+        assert_eq!(order.len(), DockSection::DEFAULT_ORDER.len());
+    }
+
+    #[test]
+    fn complete_order_should_place_missing_items_after_their_default_neighbour() {
+        let saved = [DockSection::Apps, DockSection::Start, DockSection::Trash];
+        let order = complete_order(&saved, &DockSection::DEFAULT_ORDER);
+        let at = |item| order.iter().position(|placed| *placed == item);
+        // Recents comes right after Apps by default.
+        assert_eq!(
+            at(DockSection::Recents),
+            at(DockSection::Apps).map(|i| i + 1)
+        );
+    }
+
+    #[test]
+    fn complete_order_should_drop_repeats() {
+        let saved = [MenuBarItem::Clock, MenuBarItem::Clock];
+        let order = complete_order(&saved, &MenuBarItem::DEFAULT_ORDER);
+        assert_eq!(
+            order.iter().filter(|i| **i == MenuBarItem::Clock).count(),
+            1
+        );
+    }
+
+    #[test]
+    fn a_file_without_layout_fields_should_read_with_the_defaults() -> Result<(), serde_json::Error>
+    {
+        let config: Config = serde_json::from_str(r#"{"iconSize": 50}"#)?;
+        let config = config.sanitized();
+        assert_eq!(config.menu_bar_order, MenuBarItem::DEFAULT_ORDER.to_vec());
+        assert_eq!(config.dock_order, DockSection::DEFAULT_ORDER.to_vec());
+        assert_eq!(config.dock_spacing(), DockDensity::Normal.spacing());
+        assert!((config.minimize_seconds() - GenieSpeed::Fast.seconds()).abs() < 1e-6);
+        Ok(())
+    }
 
     #[test]
     fn retired_bluetooth_visibility_does_not_override_system_status()

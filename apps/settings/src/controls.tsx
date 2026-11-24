@@ -89,12 +89,16 @@ interface SliderProps {
   max: number;
   label: string;
   unit?: string;
+  /** Shown value; the raw value by default. */
+  format?: (value: number) => string;
+  step?: number;
   disabled?: boolean;
   onChange: (value: number) => void;
 }
 
-export function Slider({ value, min, max, label, unit = "px", disabled, onChange }: SliderProps) {
+export function Slider({ value, min, max, label, unit = "px", format = String, step, disabled, onChange }: SliderProps) {
   const filled = ((value - min) / (max - min)) * 100;
+  const shown = `${format(value)} ${unit}`.trim();
   return (
     <div className="slider">
       <input
@@ -102,13 +106,14 @@ export function Slider({ value, min, max, label, unit = "px", disabled, onChange
         aria-label={label}
         min={min}
         max={max}
+        step={step}
         value={value}
-        aria-valuetext={`${value} ${unit}`}
+        aria-valuetext={shown}
         disabled={disabled}
         style={{ "--filled": `${filled}%` } as React.CSSProperties}
         onChange={(event) => onChange(Number(event.target.value))}
       />
-      <output className="slider-value" aria-hidden="true">{value} {unit}</output>
+      <output className="slider-value" aria-hidden="true">{shown}</output>
     </div>
   );
 }

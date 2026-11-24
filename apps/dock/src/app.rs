@@ -40,7 +40,7 @@ use std::{
 };
 
 use anyhow::Result;
-use bahia_config::{Config, DockDensity};
+use bahia_config::Config;
 use bahia_core::{
     attention::Attention,
     frame::{DockEdge, Frame as DockFrame},
@@ -139,12 +139,8 @@ const ASSETS_READY: u32 = WM_APP + 8;
 pub(crate) const HEALTH_CHECK: u32 = WM_APP + 9;
 const TASKBAR_PREFS_CHANGED: u32 = WM_APP + 10;
 
-/// Magnification range, in icons on either side of the cursor.
-const RANGE_IN_ICONS: f32 = 3.0;
 /// Speed of magnification entry and exit (about 200 ms).
 const HOVER_OMEGA: f32 = 28.0;
-/// Bounce height as a fraction of the icon size.
-const BOUNCE_HEIGHT: f32 = 0.5;
 const LAUNCH_BOUNCE_LIMIT: f32 = 10.0;
 const ATTENTION_HOPS: f32 = 3.0;
 
@@ -530,7 +526,8 @@ struct StageKey {
     auto_hide: bool,
     smart_hide: bool,
     icon_size: u32,
-    density: DockDensity,
+    spacing: (f32, f32),
+    magnify_range: f32,
     max_scale: f32,
     indicators: bool,
     entries: Vec<Entry>,

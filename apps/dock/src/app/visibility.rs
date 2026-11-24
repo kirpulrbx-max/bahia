@@ -225,7 +225,7 @@ impl App {
                 y: screen.top + (screen.bottom - screen.top) / 2,
             });
             self.amount = Spring::at(0.0, HOVER_OMEGA);
-            self.slide = Spring::at(1.0, self.config.dock_auto_hide_speed.omega());
+            self.slide = Spring::at(1.0, self.config.dock_slide_omega());
             self.fullscreen = false;
             self.refresh()?;
         }
